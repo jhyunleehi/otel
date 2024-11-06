@@ -22,6 +22,7 @@ var t trace.Trace
 func init() {
 	log.SetLevel(log.DebugLevel)
 	log.SetFormatter(&log.JSONFormatter{})
+	log.SetReportCaller(true)
 }
 
 func main() {

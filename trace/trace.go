@@ -97,7 +97,7 @@ func (t *Trace) UpdateNodeGraph() error {
 
 func (t *Trace) UpdateFd() error {
 	t.Fds = make(map[int]map[string]model.ProcessFd)
-	for pid := range t.Pids {
+	for _, pid := range t.Pids {
 		if _, exist := t.Fds[pid]; !exist {
 			t.Fds[pid] = map[string]model.ProcessFd{}
 		}
@@ -120,7 +120,12 @@ func (t *Trace) UpdateFd() error {
 				continue
 			}
 			fd := model.ProcessFd{}
-			if file.Type().IsRegular() {
+			regularFile, err := IsRegularFile(target)
+			if err != nil {
+				log.Error(err)
+				continue
+			}
+			if regularFile {
 				fd.Id = file.Name()
 				fd.Name = file.Name()
 				fd.Path = target
@@ -135,7 +140,7 @@ func (t *Trace) UpdateFd() error {
 
 func (t *Trace) UpdateIo() error {
 	t.Io = make(map[int]model.ProcessIO)
-	for pid := range t.Pids {
+	for _, pid := range t.Pids {
 		ioPath := fmt.Sprintf("/proc/%d/io", pid)
 		data, err := os.ReadFile(ioPath)
 		if err != nil {
@@ -182,6 +187,29 @@ func getMachinId() (string, error) {
 	machineID := strings.TrimSpace(string(data))
 	log.Debugf("Machine ID: %s", machineID)
 	return machineID, nil
+}
+
+func IsRegularFile(filePath string) (bool, error) {
+	// 파일 정보 가져오기
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			log.Error("File does not exist: %v", err)
+		} else {
+			log.Error("Error checking file: %v", err)
+		}
+		return false, err
+	}
+
+	// 일반 파일인지 확인
+	if fileInfo.Mode().IsRegular() {
+		log.Debugf("%s is a regular file.", filePath)
+		return true, nil
+	} else {
+		log.Debugf("%s is not a regular file.\n", filePath)
+		return false, nil
+	}
+
 }
 
 func findPidByCmd(command string) (pids []int, err error) {
