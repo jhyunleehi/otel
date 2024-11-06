@@ -5,26 +5,43 @@ import (
 	"fmt"
 	"os"
 	"otel/model"
+	"path"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
+	nested "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
 )
 
 type Trace struct {
-	NodeMetric *prometheus.GaugeVec
-	EdgeMetric *prometheus.GaugeVec
-	MachineId  string
-	Pids       []int
-	Fds        map[int]map[string]model.ProcessFd
-	Io         map[int]model.ProcessIO
+	NodeMetric   *prometheus.GaugeVec
+	EdgeMetric   *prometheus.GaugeVec
+	MachineId    string
+	targetCommnd string
+	Pids         []int
+	Fds          map[int]map[string]model.ProcessFd
+	Io           map[int]model.ProcessIO
 }
 
 func init() {
 	log.SetLevel(log.DebugLevel)
-	log.SetFormatter(&log.JSONFormatter{})
+	//log.SetFormatter(&log.JSONFormatter{})
+	log.SetLevel(log.DebugLevel)
+	log.SetReportCaller(true)
+	log.SetFormatter(&nested.Formatter{
+		HideKeys:        true,
+		TimestampFormat: time.RFC3339,
+		NoColors:        true,
+		CustomCallerFormatter: func(f *runtime.Frame) string {
+			s := strings.Split(f.Function, ".")
+			funcName := s[len(s)-1]
+			return fmt.Sprintf("[%s:%d %s()] ", path.Base(f.File), f.Line, funcName)
+		},
+	})
 }
 
 func NewTrace(target *string) (t Trace, err error) {
@@ -70,6 +87,7 @@ func NewTrace(target *string) (t Trace, err error) {
 		log.Error(err)
 		return t, err
 	}
+	t.targetCommnd = *target
 	t.Pids, err = findPidByCmd(*target)
 	if err != nil {
 		log.Error(err)
@@ -119,13 +137,13 @@ func (t *Trace) UpdateFd() error {
 				log.Error(msg)
 				continue
 			}
-			fd := model.ProcessFd{}
 			regularFile, err := IsRegularFile(target)
 			if err != nil {
 				log.Error(err)
 				continue
 			}
 			if regularFile {
+				fd := model.ProcessFd{}
 				fd.Id = file.Name()
 				fd.Name = file.Name()
 				fd.Path = target
@@ -154,13 +172,13 @@ func (t *Trace) UpdateIo() error {
 			parts := strings.Fields(line)
 			if len(parts) > 1 {
 				switch parts[0] {
-				case "read_bytes":
+				case "read_bytes:":
 					pio.ReadBytes, _ = strconv.ParseInt(parts[1], 10, 64)
-				case "write_bytes":
+				case "write_bytes:":
 					pio.WriteBytes, _ = strconv.ParseInt(parts[1], 10, 64)
-				case "read_ios":
+				case "syscr:":
 					pio.ReadIos, _ = strconv.ParseInt(parts[1], 10, 64)
-				case "write_ios":
+				case "syscw:":
 					pio.WriteIos, _ = strconv.ParseInt(parts[1], 10, 64)
 				}
 			}
@@ -194,9 +212,9 @@ func IsRegularFile(filePath string) (bool, error) {
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Error("File does not exist: %v", err)
+			log.Errorf("File does not exist: %v", err)
 		} else {
-			log.Error("Error checking file: %v", err)
+			log.Errorf("Error checking file: %v", err)
 		}
 		return false, err
 	}
