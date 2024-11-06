@@ -1,0 +1,15 @@
+*.exe
+__debug*
+*/__debug*
+*/vmlinux.h
+*/*.o
+*/run*
+*/*.log
+*/perf.data*
+*/*/perf.data*
+*/*/*/perf.data*
+*/*/uftrace.data*
+*/*/*/uftrace.data*
+*/*/hello
+*/*/*/hello
+

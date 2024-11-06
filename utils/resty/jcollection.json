@@ -1,0 +1,169 @@
+{
+	"info": {
+		"_postman_id": "84377935-113d-496c-aee8-66e291d082d1",
+		"name": "REST-API",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "10339583"
+	},
+	"item": [
+		{
+			"name": "KoGPT",
+			"item": [
+				{
+					"name": "New Request",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "KakaoAK 9b2679e09484abd72fed9bf38579d618",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"prompt\": \" Q:안녕하세요  자기소개 부탁드려도 될까요?  A:안녕하세요. 저는 서울에 거주하고 있는 30대 남성입니다. Q:오 그렇군요, 결혼은 하셨나요?\",\r\n    \"max_tokens\": 1200,\r\n    \"n\": 2\r\n}"
+						},
+						"url": {
+							"raw": "https://api.kakaobrain.com/v1/inference/kogpt/generation",
+							"protocol": "https",
+							"host": [
+								"api",
+								"kakaobrain",
+								"com"
+							],
+							"path": [
+								"v1",
+								"inference",
+								"kogpt",
+								"generation"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "검색1",
+			"item": [
+				{
+					"name": "1.API1",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "KakaoAK 9b2679e09484abd72fed9bf38579d618",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "https://dapi.kakao.com/v2/search/web?query=이효",
+							"protocol": "https",
+							"host": [
+								"dapi",
+								"kakao",
+								"com"
+							],
+							"path": [
+								"v2",
+								"search",
+								"web"
+							],
+							"query": [
+								{
+									"key": "query",
+									"value": "이효"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "2.API1",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "KakaoAK 9b2679e09484abd72fed9bf38579d618",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "https://dapi.kakao.com/v2/search/web?query=Korea",
+							"protocol": "https",
+							"host": [
+								"dapi",
+								"kakao",
+								"com"
+							],
+							"path": [
+								"v2",
+								"search",
+								"web"
+							],
+							"query": [
+								{
+									"key": "query",
+									"value": "Korea"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "KoGPT",
+			"item": [
+				{
+					"name": "New Request",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "KakaoAK 9b2679e09484abd72fed9bf38579d618",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"prompt\": \" Q:안녕하세요  자기소개 부탁드려도 될까요?  A:안녕하세요. 저는 서울에 거주하고 있는 30대 남성입니다. Q:오 그렇군요, 결혼은 하셨나요?\",\r\n    \"max_tokens\": 1200,\r\n    \"n\": 2\r\n}"
+						},
+						"url": {
+							"raw": "https://api.kakaobrain.com/v1/inference/kogpt/generation",
+							"protocol": "https",
+							"host": [
+								"api",
+								"kakaobrain",
+								"com"
+							],
+							"path": [
+								"v1",
+								"inference",
+								"kogpt",
+								"generation"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}
