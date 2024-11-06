@@ -1,4 +1,4 @@
-module ebpf-go
+module otel
 
 go 1.22.0
 

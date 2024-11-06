@@ -1,17 +1,23 @@
 package main
 
 import (
-	"context"	
+	"context"
+	"flag"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"otel/trace"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	log "github.com/sirupsen/logrus"
 )
+
+var t trace.Trace
 
 func init() {
 	log.SetLevel(log.DebugLevel)
@@ -19,6 +25,13 @@ func init() {
 }
 
 func main() {
+	target := flag.String("target", "fio", "trace target command")
+	flag.Parse()
+	t, err := trace.NewTrace(target)
+	if err != nil {
+		log.Fatal(err)
+	}
+	t.UpdateNodeGraph()
 	if err := run(); err != nil {
 		log.Fatalln(err)
 	}
@@ -31,7 +44,7 @@ func run() (err error) {
 
 	// Start HTTP server.
 	srv := &http.Server{
-		Addr:         ":8080",
+		Addr:         ":2224",
 		BaseContext:  func(_ net.Listener) context.Context { return ctx },
 		ReadTimeout:  time.Second,
 		WriteTimeout: 10 * time.Second,
@@ -70,10 +83,20 @@ func newHTTPHandler() http.Handler {
 	}
 
 	// Register handlers.
+	handleFunc("/metrics", TraceHandler)
 	handleFunc("/rolldice/", rolldice)
-	handleFunc("/rolldice/{player}", rolldice)
 
 	// Add HTTP instrumentation for the whole server.
 	handler := otelhttp.NewHandler(mux, "/")
 	return handler
+}
+
+func TraceHandler(w http.ResponseWriter, r *http.Request) {
+	log.Debug("MetricsHandler")
+	err := t.UpdateNodeGraph()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError) // 500 Internal Server Error
+		fmt.Fprintf(w, "Status: 500 Internal Server Error")
+	}
+	promhttp.Handler().ServeHTTP(w, r)
 }
