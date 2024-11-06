@@ -1,7 +1,12 @@
 package trace
 
 import (
+	"errors"
+	"fmt"
 	"os"
+	"otel/model"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -11,6 +16,10 @@ import (
 type Trace struct {
 	NodeMetric *prometheus.GaugeVec
 	EdgeMetric *prometheus.GaugeVec
+	MachineId  string
+	Pids       []int
+	Fds        map[int]map[string]model.ProcessFd
+	Io         map[int]model.ProcessIO
 }
 
 func init() {
@@ -18,8 +27,8 @@ func init() {
 	log.SetFormatter(&log.JSONFormatter{})
 }
 
-func NewTrace(target *string) (Trace, error) {
-	t := Trace{}
+func NewTrace(target *string) (t Trace, err error) {
+	t = Trace{}
 	t.NodeMetric = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "graph_node",
@@ -56,7 +65,16 @@ func NewTrace(target *string) (Trace, error) {
 			"color",         //string	Sets the default color of the edge. It can be an acceptable HTML color string. Default: #999
 		},
 	)
-
+	t.MachineId, err = getMachinId()
+	if err != nil {
+		log.Error(err)
+		return t, err
+	}
+	t.Pids, err = findPidByCmd(*target)
+	if err != nil {
+		log.Error(err)
+		return t, err
+	}
 	// Prometheus에 메트릭 등록
 	prometheus.MustRegister(t.NodeMetric)
 	prometheus.MustRegister(t.EdgeMetric)
@@ -64,6 +82,87 @@ func NewTrace(target *string) (Trace, error) {
 }
 
 func (t *Trace) UpdateNodeGraph() error {
+	err := t.UpdateFd()
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	err = t.UpdateIo()
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	return nil
+}
+
+func (t *Trace) UpdateFd() error {
+	t.Fds = make(map[int]map[string]model.ProcessFd)
+	for pid := range t.Pids {
+		if _, exist := t.Fds[pid]; !exist {
+			t.Fds[pid] = map[string]model.ProcessFd{}
+		}
+		fdDir := fmt.Sprintf("/proc/%d/fd", pid)
+		files, err := os.ReadDir(fdDir)
+		if err != nil {
+			msg := fmt.Sprint("Error reading /proc/<pid>/fd directory:", err)
+			log.Error(msg)
+			return errors.New(msg)
+		}
+		for _, file := range files {
+			// 파일 디스크립터 경로
+			fdPath := filepath.Join(fdDir, file.Name())
+
+			// 심볼릭 링크를 통해 실제 파일 경로 확인
+			target, err := os.Readlink(fdPath)
+			if err != nil {
+				msg := fmt.Sprintf("Error reading symlink for fd %s: %v", file.Name(), err)
+				log.Error(msg)
+				continue
+			}
+			fd := model.ProcessFd{}
+			if file.Type().IsRegular() {
+				fd.Id = file.Name()
+				fd.Name = file.Name()
+				fd.Path = target
+				log.Debugf("FD %s -> %s\n", file.Name(), target)
+				t.Fds[pid][file.Name()] = fd
+			}
+		}
+	}
+	log.Debug(t.Fds)
+	return nil
+}
+
+func (t *Trace) UpdateIo() error {
+	t.Io = make(map[int]model.ProcessIO)
+	for pid := range t.Pids {
+		ioPath := fmt.Sprintf("/proc/%d/io", pid)
+		data, err := os.ReadFile(ioPath)
+		if err != nil {
+			log.Error(err)
+			return err
+		}
+		pio := model.ProcessIO{}
+		// 파일 내용에서 필요한 값 추출 (read_bytes, write_bytes, read_ios, write_ios)
+		lines := strings.Split(string(data), "\n")
+		for _, line := range lines {
+			parts := strings.Fields(line)
+			if len(parts) > 1 {
+				switch parts[0] {
+				case "read_bytes":
+					pio.ReadBytes, _ = strconv.ParseInt(parts[1], 10, 64)
+				case "write_bytes":
+					pio.WriteBytes, _ = strconv.ParseInt(parts[1], 10, 64)
+				case "read_ios":
+					pio.ReadIos, _ = strconv.ParseInt(parts[1], 10, 64)
+				case "write_ios":
+					pio.WriteIos, _ = strconv.ParseInt(parts[1], 10, 64)
+				}
+			}
+		}
+		t.Io[pid] = pio
+	}
+	log.Debug(t.Io)
 	return nil
 }
 
@@ -83,4 +182,35 @@ func getMachinId() (string, error) {
 	machineID := strings.TrimSpace(string(data))
 	log.Debugf("Machine ID: %s", machineID)
 	return machineID, nil
+}
+
+func findPidByCmd(command string) (pids []int, err error) {
+	// /proc 디렉터리에서 실행 중인 "fio" 프로세스 찾기
+	files, err := os.ReadDir("/proc")
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+
+	// "fio" 프로세스 PID 찾기
+	for _, file := range files {
+		if pid, err := strconv.Atoi(file.Name()); err == nil {
+			cmdLine, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid))
+			if err != nil {
+				log.Error(err)
+				continue
+			}
+			if strings.TrimSpace(string(cmdLine)) == command {
+				pids = append(pids, pid)
+			}
+		}
+	}
+	log.Debug(pids)
+	return pids, nil
+}
+
+func parseInt(s string) int {
+	var res int
+	fmt.Sscanf(s, "%d", &res)
+	return res
 }

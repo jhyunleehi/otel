@@ -1,8 +1,5 @@
 package model
 
-import (	
-)
-
 type Node struct {
 	Id            string  `json:"id"`            //Unique identifier of the node. This ID is referenced by edge in its source and target field.
 	Title         string  `json:"title"`         //Name of the node visible in just under the node.
@@ -27,4 +24,20 @@ type Edge struct {
 	Thickness     float32 `json:"thickness"`     //The thickness of the edge. Default: 1
 	Highlighted   bool    `json:"highlighted"`   //boolean	Sets whether the edge should be highlighted.
 	Color         string  `json:"color"`         //string	Sets the default color of the edge. It can be an acceptable HTML color string. Default: #999
+}
+
+type ProcessFd struct {
+	Id       string
+	Name     string
+	Path     string
+	dm       string
+	device   string
+	deviceId int
+}
+
+type ProcessIO struct {
+	ReadBytes  int64
+	WriteBytes int64
+	ReadIos    int64
+	WriteIos   int64
 }
