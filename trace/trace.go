@@ -11,10 +11,9 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	
+
 	log "github.com/sirupsen/logrus"
 )
-
 
 type Trace struct {
 	MachineId     string
@@ -23,9 +22,11 @@ type Trace struct {
 	Pid           []int
 	Fd            map[int]map[string]model.ProcessFd //pid,fd index
 	Io            map[int]model.ProcessIO            //pid index
-	FileSystem    map[string]model.FileSystem        //mount point
-	DeviceMap     map[uint64]string                  //device number
-	DeviceStatMap map[uint64]model.BolckDeviceStat   //device number
+	Fs            map[string]model.FileSystem        //process file system
+	Dev           map[uint64]model.BolckDeviceStat   //process device
+	FileSystemMap map[string]model.FileSystem        //all file system
+	DeviceMap     map[uint64]string                  //all device path
+	DeviceStatMap map[uint64]model.BolckDeviceStat   //all device info
 	ISCSIInfo     *iscsi.ISCSIInfo
 }
 
@@ -120,6 +121,30 @@ func (t *Trace) CreatePidFdMap() error {
 	return nil
 }
 
+func (t *Trace) CreateFsMap() error {
+	t.Fs = make(map[string]model.FileSystem)
+	for _, pid := range t.Pid {
+		for _, fd := range t.Fd[pid] {
+			mountPoint := fd.MountPoint
+			t.Fs[mountPoint] = t.FileSystemMap[mountPoint]
+		}
+	}
+	log.Debug(t.Fs)
+	return nil
+}
+
+func (t *Trace) CreateDevMap() error {
+	t.Dev = make(map[uint64]model.BolckDeviceStat)
+	for _, pid := range t.Pid {
+		for _, fd := range t.Fd[pid] {
+			deviceNumber := fd.DeviceNumber
+			t.Dev[deviceNumber] = t.DeviceStatMap[deviceNumber]
+		}
+	}
+	log.Debug(t.Dev)
+	return nil
+}
+
 func (t *Trace) CreatePidIo() error {
 	t.Io = make(map[int]model.ProcessIO)
 	for _, pid := range t.Pid {
@@ -155,7 +180,7 @@ func (t *Trace) CreatePidIo() error {
 
 func (t *Trace) findFileSystem(filePath string) (fs model.FileSystem, err error) {
 	longestMatch := ""
-	for _, v := range t.FileSystem {
+	for _, v := range t.FileSystemMap {
 		// 지정된 경로가 현재 마운트 지점 하위에 있는지 확인
 		if strings.HasPrefix(filePath, v.MountPoint) && len(v.MountPoint) > len(longestMatch) {
 			longestMatch = v.MountPoint
@@ -171,7 +196,7 @@ func (t *Trace) findFileSystem(filePath string) (fs model.FileSystem, err error)
 }
 
 func (t *Trace) CreateFileSystemMap() error {
-	t.FileSystem = make(map[string]model.FileSystem)
+	t.FileSystemMap = make(map[string]model.FileSystem)
 
 	file, err := os.Open("/proc/mounts")
 	if err != nil {
@@ -206,10 +231,10 @@ func (t *Trace) CreateFileSystemMap() error {
 				fs.Minor = stat.Rdev & 0xff
 				fs.DevicePath = t.DeviceMap[fs.DeviceNumber]
 			}
-			t.FileSystem[fs.MountPoint] = fs
+			t.FileSystemMap[fs.MountPoint] = fs
 		}
 	}
-	log.Debug(t.FileSystem)
+	log.Debug(t.FileSystemMap)
 	return nil
 }
 
@@ -243,7 +268,7 @@ func (t *Trace) CreateDeviceMap() error {
 			Nlink:   stat.Nlink,
 			Mode:    stat.Mode,
 			Uid:     stat.Uid,
-			Gid:     stat.Gid,			
+			Gid:     stat.Gid,
 			Rdev:    stat.Rdev,
 			Size:    stat.Size,
 			Blksize: stat.Blksize,
