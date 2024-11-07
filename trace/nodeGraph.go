@@ -151,7 +151,7 @@ func (t *Trace) createNodeHost() (err error) {
 	nodeColor := "blue"
 	nodeIcon := ""
 	nodeRadius := ""
-	nodeHighlighted := ""
+	nodeHighlighted := "true"
 	newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
 	NodeMetric.WithLabelValues(newNode...).Set(1)
 	return nil
@@ -170,7 +170,7 @@ func (t *Trace) createNodePid() (err error) {
 		nodeColor := ""
 		nodeIcon := ""
 		nodeRadius := ""
-		nodeHighlighted := "true"
+		nodeHighlighted := ""
 		newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
 		NodeMetric.WithLabelValues(newNode...).Set(1)
 	}
@@ -190,7 +190,7 @@ func (t *Trace) createNodePidFd() (err error) {
 			nodeColor := ""
 			nodeIcon := ""
 			nodeRadius := ""
-			nodeHighlighted := "true"
+			nodeHighlighted := ""
 			newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
 			NodeMetric.WithLabelValues(newNode...).Set(1)
 		}
@@ -212,7 +212,7 @@ func (t *Trace) createNodeFS() (err error) {
 		nodeColor := ""
 		nodeIcon := ""
 		nodeRadius := ""
-		nodeHighlighted := ""
+		nodeHighlighted := "true"
 		newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
 		NodeMetric.WithLabelValues(newNode...).Set(1)
 	}
