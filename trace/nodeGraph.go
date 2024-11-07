@@ -135,7 +135,7 @@ func (t *Trace) CreatePrometheusMetric() (err error) {
 	t.createEdgeHostPid()
 	t.createEdgePidFd()
 	t.createEdgFdFs()
-	t.createEdgFsDevice()
+	//t.createEdgFsDevice()
 
 	return nil
 }
@@ -148,10 +148,10 @@ func (t *Trace) createNodeHost() (err error) {
 	nodeArcFail := fmt.Sprintf("%f", 0.0)
 	nodeArcPass := fmt.Sprintf("%f", 1.0)
 	nodeRole := ""
-	nodeColor := ""
+	nodeColor := "blue"
 	nodeIcon := ""
 	nodeRadius := ""
-	nodeHighlighted := "true"
+	nodeHighlighted := ""
 	newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
 	NodeMetric.WithLabelValues(newNode...).Set(1)
 	return nil
@@ -170,7 +170,7 @@ func (t *Trace) createNodePid() (err error) {
 		nodeColor := ""
 		nodeIcon := ""
 		nodeRadius := ""
-		nodeHighlighted := ""
+		nodeHighlighted := "true"
 		newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
 		NodeMetric.WithLabelValues(newNode...).Set(1)
 	}
@@ -190,7 +190,7 @@ func (t *Trace) createNodePidFd() (err error) {
 			nodeColor := ""
 			nodeIcon := ""
 			nodeRadius := ""
-			nodeHighlighted := ""
+			nodeHighlighted := "true"
 			newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
 			NodeMetric.WithLabelValues(newNode...).Set(1)
 		}
@@ -212,7 +212,7 @@ func (t *Trace) createNodeFS() (err error) {
 		nodeColor := ""
 		nodeIcon := ""
 		nodeRadius := ""
-		nodeHighlighted := "true"
+		nodeHighlighted := ""
 		newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
 		NodeMetric.WithLabelValues(newNode...).Set(1)
 	}
@@ -226,13 +226,13 @@ func (t *Trace) createNodeDevice() (err error) {
 		nodeName := devicePath
 		nodeMainStat := "oline"
 		nodeSubStat := fmt.Sprintf("%d MiB", ds.Size/1024/1024) //size
-		nodeArcFail := fmt.Sprintf("%d", 0)
+		nodeArcFail := fmt.Sprintf("%f", 0.0)
 		nodeArcPass := fmt.Sprintf("%f", 1.0)
 		nodeRole := ""
 		nodeColor := ""
 		nodeIcon := ""
 		nodeRadius := ""
-		nodeHighlighted := "true"
+		nodeHighlighted := ""
 		newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
 		NodeMetric.WithLabelValues(newNode...).Set(1)
 	}
