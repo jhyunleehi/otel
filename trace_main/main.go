@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"otel/model"
 	"otel/trace"
 	"path"
 	"runtime"
@@ -27,6 +28,7 @@ func init() {
 			return fmt.Sprintf("[%s:%d %s()] ", path.Base(f.File), f.Line, funcName)
 		},
 	})
+	model.SetCode()
 }
 
 // TestCalculatorTestSuite: 스위트를 실행하는 메인 테스트 함수
@@ -37,7 +39,9 @@ func main() {
 		log.Error(err)
 		return
 	}
-	tr.UpdateNodeGraph()
-	tr.UpdateNodeGraph()
+	tr.CreateISCSIInfo()
+	tr.CreateDeviceMap()
+	tr.CreateFileSystemMap()
+	tr.CreateNodeGraph()	
 }
 

@@ -29,8 +29,8 @@
             }
         },
         {
-            "type": "cppbuild",
             "label": "C/C++: gcc build active file",
+            "type": "shell",
             "command": "/usr/bin/gcc",
             "args": [
                 "-fdiagnostics-color=always",

@@ -21,7 +21,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var t trace.Trace
+var (
+	targetCommand *string
+)
 
 func init() {
 	log.SetLevel(log.DebugLevel)
@@ -41,13 +43,9 @@ func init() {
 }
 
 func main() {
-	target := flag.String("target", "fio", "trace target command")
+	targetCommand = flag.String("target", "fio", "trace target command")
 	flag.Parse()
-	t, err := trace.NewTrace(target)
-	if err != nil {
-		log.Fatal(err)
-	}
-	t.UpdateNodeGraph()
+
 	if err := run(); err != nil {
 		log.Fatalln(err)
 	}
@@ -109,8 +107,15 @@ func newHTTPHandler() http.Handler {
 
 func TraceHandler(w http.ResponseWriter, r *http.Request) {
 	log.Debug("MetricsHandler")
-	err := t.UpdateNodeGraph()
+	t, err := trace.NewTrace(targetCommand)
 	if err != nil {
+		log.Error(err)
+		w.WriteHeader(http.StatusInternalServerError) // 500 Internal Server Error
+		fmt.Fprintf(w, "Status: 500 Internal Server Error")
+	}
+	err = t.CreateNodeGraph()
+	if err != nil {
+		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError) // 500 Internal Server Error
 		fmt.Fprintf(w, "Status: 500 Internal Server Error")
 	}

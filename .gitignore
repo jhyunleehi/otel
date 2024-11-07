@@ -1,3 +1,4 @@
+otel
 *.exe
 __debug*
 */__debug*

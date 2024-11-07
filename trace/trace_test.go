@@ -29,7 +29,7 @@ func (s *TestSuite) SetupTest() {
 
 // TestAdd: Add 메서드 테스트
 func (s *TestSuite) Test_UpdateNodeGraph() {
-	err := s.tr.UpdateNodeGraph()
+	err := s.tr.CreateNodeGraph()
 	assert.NotNil(s.T(),err)
 	//assert.Equal(s.T(), 5, result, "2 + 3은 5여야 합니다.")
 }
