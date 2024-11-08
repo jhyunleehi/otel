@@ -93,7 +93,7 @@ func init() {
 }
 
 // 출력 파싱 함수
-func parseISCSISession(output string) (*ISCSIInfo, error) {
+func parseISCSISession(output string) (ISCSIInfo, error) {
 	// 줄 단위로 입력 처리
 	scanner := bufio.NewScanner(strings.NewReader(output))
 	var iscsiInfo ISCSIInfo
@@ -230,10 +230,10 @@ func parseISCSISession(output string) (*ISCSIInfo, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, err
+		return iscsiInfo, err
 	}
 
-	return &iscsiInfo, nil
+	return iscsiInfo, nil
 }
 
 // 문자열에서 정수를 추출하는 함수(융통성이 있음)
@@ -255,16 +255,21 @@ func parseAtoi(s string) int {
 	}
 }
 
-func GetISCSISession() (*ISCSIInfo, error) {
+func GetISCSISession() (iscsiInfo ISCSIInfo, err error) {
 	// iscsiadm 명령어 출력 예시
 	cmd := exec.Command("iscsiadm", "-m", "session", "-P", "3")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		fmt.Println("Error parsing output:", err)
-		return nil, err
+		outstr:=string(output)
+		log.Errorf("Error parsing output:[%s] [%s]", err, outstr)
+		if strings.Contains(outstr, "No active sessions"){
+			return iscsiInfo, nil
+		}
+		return iscsiInfo, err
 	}
+	
 	// 출력 파싱
-	iscsiInfo, err := parseISCSISession(string(output))
+	iscsiInfo, err = parseISCSISession(string(output))
 	if err != nil {
 		log.Error("Error parsing output:", err)
 		return iscsiInfo, err

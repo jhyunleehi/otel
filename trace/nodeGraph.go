@@ -6,8 +6,9 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	nested "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/prometheus/client_golang/prometheus"
-	nested "github.com/antonfisher/nested-logrus-formatter"	
 	log "github.com/sirupsen/logrus"
 )
 
@@ -31,7 +32,6 @@ func init() {
 			return fmt.Sprintf("[%s:%d %s()] ", path.Base(f.File), f.Line, funcName)
 		},
 	})
-
 
 	NodeMetric = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -141,7 +141,7 @@ func (t *Trace) CreatePrometheusMetric() (err error) {
 	t.createEdgeHostPid()
 	t.createEdgePidFd()
 	t.createEdgFdFs()
-	//t.createEdgFsDevice()
+	t.createEdgFsDevice()
 
 	return nil
 }
@@ -155,7 +155,7 @@ func (t *Trace) createNodeHost() (err error) {
 	nodeArcPass := fmt.Sprintf("%f", 1.0)
 	nodeRole := ""
 	nodeColor := "green"
-	nodeIcon := ""
+	nodeIcon := "apps"
 	nodeRadius := ""
 	nodeHighlighted := "true"
 	newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
@@ -194,7 +194,7 @@ func (t *Trace) createNodePidFd() (err error) {
 			nodeArcPass := fmt.Sprintf("%f", 0.0)
 			nodeRole := ""
 			nodeColor := ""
-			nodeIcon := "file-alt"
+			nodeIcon := "file-alt" //"file-alt","file-edit-alt"
 			nodeRadius := ""
 			nodeHighlighted := ""
 			newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
@@ -218,7 +218,7 @@ func (t *Trace) createNodeFS() (err error) {
 		nodeColor := ""
 		nodeIcon := ""
 		nodeRadius := ""
-		nodeHighlighted := "true"
+		nodeHighlighted := ""
 		newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
 		NodeMetric.WithLabelValues(newNode...).Set(1)
 	}
@@ -250,8 +250,8 @@ func (t *Trace) createEdgeHostPid() (err error) {
 		edgeId := fmt.Sprintf("%s:%d", t.Hostname, pid)
 		edgeSource := fmt.Sprintf("host:%s", t.Hostname)
 		edgeTarget := fmt.Sprintf("pid:%s:%d", t.Hostname, pid)
-		edgeMainStat := "open"
-		edgeSecondarystat := "online"
+		edgeMainStat := "hostE1"
+		edgeSecondarystat := "hostE2"
 		edgeDetail__info := ""
 		edgeThickness := ""
 		edgeHighlighted := ""
@@ -268,8 +268,8 @@ func (t *Trace) createEdgePidFd() (err error) {
 			edgeId := fmt.Sprintf("%s:%d:%s", t.Hostname, pid, fd.Id)
 			edgeSource := fmt.Sprintf("pid:%s:%d", t.Hostname, pid)
 			edgeTarget := fmt.Sprintf("fd:%s:%d:%s", t.Hostname, pid, fd.Id)
-			edgeMainStat := "open"
-			edgeSecondarystat := "online"
+			edgeMainStat := "pidE1"
+			edgeSecondarystat := "pidE2"
 			edgeDetail__info := ""
 			edgeThickness := ""
 			edgeHighlighted := ""
@@ -285,10 +285,10 @@ func (t *Trace) createEdgFdFs() (err error) {
 	for _, pid := range t.Pid {
 		for _, fd := range t.Fd[pid] {
 			edgeId := fmt.Sprintf("%s:%d:%s", t.Hostname, pid, fd.Id)
-			edgeSource := fmt.Sprintf("fd:%s:%d:%s", t.Hostname, pid, fd.Id)			
+			edgeSource := fmt.Sprintf("fd:%s:%d:%s", t.Hostname, pid, fd.Id)
 			edgeTarget := fmt.Sprintf("fs:%s:%s", t.Hostname, fd.MountPoint)
-			edgeMainStat := "open"
-			edgeSecondarystat := "online"
+			edgeMainStat := "fdE1"
+			edgeSecondarystat := "fdE2"
 			edgeDetail__info := ""
 			edgeThickness := ""
 			edgeHighlighted := ""
@@ -300,21 +300,27 @@ func (t *Trace) createEdgFdFs() (err error) {
 	return nil
 }
 
-func (t *Trace) createEdgFsDevice() (err error) {	
+func (t *Trace) createEdgFsDevice() (err error) {
 	for _, fs := range t.Fs {
-		edgeId := fmt.Sprintf("%s:%s", t.Hostname, fs.MountPoint)
-		edgeSource := fmt.Sprintf("fs:%s:%s", t.Hostname, fs.MountPoint)
-		deviceNumber := fs.DeviceNumber
-		dv := t.DeviceMap[deviceNumber]
-		edgeTarget := fmt.Sprintf("dev:%s:%s", t.Hostname, dv)
-		edgeMainStat := "open"
-		edgeSecondarystat := "online"
-		edgeDetail__info := ""
-		edgeThickness := ""
-		edgeHighlighted := ""
-		edgeColor := ""
-		newNode := []string{edgeId, edgeSource, edgeTarget, edgeMainStat, edgeSecondarystat, edgeDetail__info, edgeThickness, edgeHighlighted, edgeColor}
-		EdgeMetric.WithLabelValues(newNode...).Set(1)
+		switch  fs.Type{
+		case "nfs4","nfs3":
+			log.Debug("NFS Connection")
+		default:
+			edgeId := fmt.Sprintf("%s:%s", t.Hostname, fs.MountPoint)
+			edgeSource := fmt.Sprintf("fs:%s:%s", t.Hostname, fs.MountPoint)
+			deviceNumber := fs.DeviceNumber
+			dv := t.DeviceMap[deviceNumber]
+			edgeTarget := fmt.Sprintf("dev:%s:%s", t.Hostname, dv)
+			edgeMainStat := "fsE1"
+			edgeSecondarystat := "fsE2"
+			edgeDetail__info := ""
+			edgeThickness := ""
+			edgeHighlighted := ""
+			edgeColor := ""
+			newNode := []string{edgeId, edgeSource, edgeTarget, edgeMainStat, edgeSecondarystat, edgeDetail__info, edgeThickness, edgeHighlighted, edgeColor}
+			EdgeMetric.WithLabelValues(newNode...).Set(1)
+		}
+
 	}
 	return nil
 }

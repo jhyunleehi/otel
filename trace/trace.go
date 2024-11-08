@@ -28,7 +28,7 @@ type Trace struct {
 	FileSystemMap map[string]model.FileSystem        //all file system
 	DeviceMap     map[uint64]string                  //all device path
 	DeviceStatMap map[uint64]model.BolckDeviceStat   //all device info
-	ISCSIInfo     *iscsi.ISCSIInfo
+	ISCSIInfo     iscsi.ISCSIInfo
 
 
 }
