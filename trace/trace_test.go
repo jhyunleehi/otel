@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-
 // TestSuite 정의
 type TestSuite struct {
 	suite.Suite
@@ -24,14 +23,15 @@ func (s *TestSuite) SetupTest() {
 	var err error
 	targetCommand := "fio"
 	s.tr, err = NewTrace(&targetCommand)
-	assert.NotNil(s.T(),err)
+	assert.NotNil(s.T(), err)
 }
 
 // TestAdd: Add 메서드 테스트
 func (s *TestSuite) Test_UpdateNodeGraph() {
-	err := s.tr.CreateNodeGraph()
-	assert.NotNil(s.T(),err)
+	err := s.tr.CreateNodeGraphData()
+	assert.NotNil(s.T(), err)
 	//assert.Equal(s.T(), 5, result, "2 + 3은 5여야 합니다.")
+	err = s.tr.CreatePrometheusMetric()
+	assert.NotNil(s.T(), err)
+
 }
-
-

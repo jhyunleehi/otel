@@ -38,10 +38,9 @@ func main() {
 	if err != nil {
 		log.Error(err)
 		return
-	}
-	tr.CreateISCSIInfo()
-	tr.CreateDeviceMap()
-	tr.CreateFileSystemMap()
-	tr.CreateNodeGraph()	
+	}	
+	tr.CreateNodeGraphData()	
+	tr.CreatePrometheusMetric()	
+
 }
 

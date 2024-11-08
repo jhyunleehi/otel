@@ -113,7 +113,13 @@ func TraceHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError) // 500 Internal Server Error
 		fmt.Fprintf(w, "Status: 500 Internal Server Error")
 	}
-	err = t.CreateNodeGraph()
+	err = t.CreateNodeGraphData()
+	if err != nil {
+		log.Error(err)
+		w.WriteHeader(http.StatusInternalServerError) // 500 Internal Server Error
+		fmt.Fprintf(w, "Status: 500 Internal Server Error")
+	}
+	err = t.CreatePrometheusMetric()
 	if err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError) // 500 Internal Server Error

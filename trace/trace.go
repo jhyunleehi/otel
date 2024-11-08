@@ -12,7 +12,6 @@ import (
 	"strings"
 	"syscall"
 
-
 	log "github.com/sirupsen/logrus"
 )
 
@@ -29,8 +28,6 @@ type Trace struct {
 	DeviceMap     map[uint64]string                  //all device path
 	DeviceStatMap map[uint64]model.BolckDeviceStat   //all device info
 	ISCSIInfo     iscsi.ISCSIInfo
-
-
 }
 
 func NewTrace(target *string) (t Trace, err error) {
@@ -141,14 +138,75 @@ func (t *Trace) CreateDevMap() error {
 	for _, pid := range t.Pid {
 		for _, fd := range t.Fd[pid] {
 			deviceNumber := fd.DeviceNumber
-			t.Dev[deviceNumber] = t.DeviceStatMap[deviceNumber]
+			if devicePath, exists := t.DeviceMap[deviceNumber]; exists {
+				if len(devicePath) == 0 {
+					continue
+				}
+				t.Dev[deviceNumber] = t.DeviceStatMap[deviceNumber]
+			}
 		}
 	}
 	log.Debug(t.Dev)
 	return nil
 }
 
-func (t *Trace) CreatePidIo() error {
+func (t *Trace) UpdateDevSlave() error {
+	// dm-0 device 처리
+	// /sys/class/block/dm-0/slaves device 추출
+	// slaves 항목에 device 저장
+	//1. t.Dev에서 used device 추출
+	//2. t.Dev의 deviceNumber를 t.DeviceMap[n] 넣어서 device path 식별
+	//3. /dev/dm-0 경로 정상 확인
+	//4. /sys/calss/block/dm-0/slaves device 추출
+	//5. slave device number를 저장
+	//6. 나중에 edge 그릴때 slave 있는 경우는 추적해서 추적하여 그리도록 DFS 방식으로 구현
+	for deviceNumber := range t.Dev {
+		devicePath := t.DeviceMap[deviceNumber]
+		log.Debugf("[%d][%s]", deviceNumber, devicePath)
+		if strings.Contains(devicePath, "dm") {
+			fields := strings.Split(devicePath, "/")
+			deviceMapper := fields[len(fields)-1]
+
+			// /sys/class/block/dm-0/slaves/ 디렉터리에서 기본 디바이스 찾기
+			slaveDir := filepath.Join("/sys/class/block", deviceMapper, "slaves")
+			slaveDevices, err := os.ReadDir(slaveDir)
+			if err != nil {
+				log.Errorf("Error reading %s: %v", slaveDir, err)
+				return err
+			}
+
+			if len(slaveDevices) == 0 {
+				log.Debug("No underlying devices found for", deviceMapper)
+				return nil
+			}
+
+			// 기본 디바이스에 대한 정보를 출력
+			log.Printf("Underlying devices for %s:\n", deviceMapper)
+			slaveDevName := []string{}
+			slaveDev := []uint64{}
+			for _, slave := range slaveDevices {
+				// 기본 디바이스 경로 (예: "/dev/sda1")
+				slavePath := filepath.Join("/dev", slave.Name())
+				slaveDevName = append(slaveDevName, slavePath)
+				dn, err := getDeviceRdev(slavePath)
+				if err != nil {
+					log.Error(err)
+				} else {
+					slaveDev = append(slaveDev, dn)
+				}
+			}
+			obj := t.Dev[deviceNumber]
+			obj.SlavesDevName = slaveDevName
+			obj.SlavesDev = slaveDev
+			t.Dev[deviceNumber] = obj
+		}
+
+	}
+	log.Debug(t.Dev)
+	return nil
+}
+
+func (t *Trace) UpdatePidIo() error {
 	t.Io = make(map[int]model.ProcessIO)
 	for _, pid := range t.Pid {
 		ioPath := fmt.Sprintf("/proc/%d/io", pid)
@@ -262,20 +320,57 @@ func (t *Trace) CreateDeviceMap() error {
 			log.Debugf("Skipping %s: %v\n", devicePath, err)
 			continue
 		}
+		// block device 만 처리
+		if (stat.Mode & syscall.S_IFMT) != syscall.S_IFBLK {
+			continue
+		}
+
 		deviceNumber := uint64(stat.Rdev)
 		t.DeviceMap[deviceNumber] = devicePath
 
+		//device mapper, slaves 처리
+		slaveDevName := []string{}
+		slaveDev := []uint64{}
+		if strings.Contains(device.Name(), "dm") {
+			deviceMapper := device.Name()
+			// /sys/class/block/dm-0/slaves/ 디렉터리에서 기본 디바이스 찾기
+			slaveDir := filepath.Join("/sys/class/block", deviceMapper, "slaves")
+			slaveDevices, err := os.ReadDir(slaveDir)
+			if err != nil {
+				log.Errorf("Error reading %s: %v", slaveDir, err)
+				return err
+			}
+			if len(slaveDevices) != 0 {
+				// 기본 디바이스에 대한 정보를 출력
+				log.Printf("Underlying devices for %s:\n", deviceMapper)
+				for _, slave := range slaveDevices {
+					// 기본 디바이스 경로 (예: "/dev/sda1")
+					slavePath := filepath.Join("/dev", slave.Name())
+					slaveDevName = append(slaveDevName, slavePath)
+					dn, err := getDeviceRdev(slavePath)
+					if err != nil {
+						log.Error(err)
+					} else {
+						slaveDev = append(slaveDev, dn)
+					}
+				}
+			}
+		}
+
 		ds := model.BolckDeviceStat{
-			Dev:     stat.Dev,
-			Ino:     stat.Ino,
-			Nlink:   stat.Nlink,
-			Mode:    stat.Mode,
-			Uid:     stat.Uid,
-			Gid:     stat.Gid,
-			Rdev:    stat.Rdev,
-			Size:    stat.Size,
-			Blksize: stat.Blksize,
-			Blocks:  stat.Blocks,
+			Dev:           stat.Dev,
+			Ino:           stat.Ino,
+			Nlink:         stat.Nlink,
+			Mode:          stat.Mode,
+			Uid:           stat.Uid,
+			Gid:           stat.Gid,
+			Rdev:          stat.Rdev,
+			Size:          stat.Size,
+			Blksize:       stat.Blksize,
+			Blocks:        stat.Blocks,
+			DevicePath:    devicePath,
+			SlavesDev:     slaveDev,
+			SlavesDevName: slaveDevName,
 		}
 		// map에 추가
 		t.DeviceStatMap[deviceNumber] = ds
@@ -286,6 +381,7 @@ func (t *Trace) CreateDeviceMap() error {
 	// for devNum, path := range t.DeviceMap {
 	// 	log.Debugf("Device Number: %d, Path: %s", devNum, path)
 	// }
+
 	return nil
 }
 

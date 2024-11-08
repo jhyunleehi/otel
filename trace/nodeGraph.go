@@ -76,14 +76,13 @@ func init() {
 
 }
 
-func (t *Trace) CreateNodeGraph() error {
+func (t *Trace) CreateNodeGraphData() error {
 
 	err := t.CreateISCSIInfo()
 	if err != nil {
 		log.Error(err)
 		return err
 	}
-
 	err = t.CreateDeviceMap()
 	if err != nil {
 		log.Error(err)
@@ -112,13 +111,7 @@ func (t *Trace) CreateNodeGraph() error {
 		return err
 	}
 
-	err = t.CreatePidIo()
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-
-	err = t.CreatePrometheusMetric()
+	err = t.UpdatePidIo()
 	if err != nil {
 		log.Error(err)
 		return err
@@ -302,8 +295,8 @@ func (t *Trace) createEdgFdFs() (err error) {
 
 func (t *Trace) createEdgFsDevice() (err error) {
 	for _, fs := range t.Fs {
-		switch  fs.Type{
-		case "nfs4","nfs3":
+		switch fs.Type {
+		case "nfs4", "nfs3":
 			log.Debug("NFS Connection")
 		default:
 			edgeId := fmt.Sprintf("%s:%s", t.Hostname, fs.MountPoint)
