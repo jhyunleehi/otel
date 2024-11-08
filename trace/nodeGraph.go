@@ -276,6 +276,10 @@ func (t *Trace) createNodeDeviceMapper() (err error) {
 
 func (t *Trace) createNodeIscsi() (err error) {
 	initiator := t.ISCSIInfo.Interface.Initiator
+	if len(initiator) == 0 {
+		return nil
+	}
+
 	ipaddr := t.ISCSIInfo.Interface.IPAddress
 	nodeId := fmt.Sprintf("iscsi:%s:%s", t.Hostname, initiator)
 	nodeName := fmt.Sprintf("%s:%s", ipaddr, initiator)
@@ -481,10 +485,11 @@ func (t *Trace) createEdgDeviceIscsi() (err error) {
 
 func (t *Trace) createEdgIscsiNic() (err error) {
 	initiator := t.ISCSIInfo.Interface.Initiator
-	ipaddr := t.ISCSIInfo.Interface.IPAddress
 	if len(initiator) == 0 {
 		return nil
 	}
+	
+	ipaddr := t.ISCSIInfo.Interface.IPAddress
 	nicName, err := t.findNicByAddr(ipaddr)
 	if err != nil {
 		log.Error(err)
