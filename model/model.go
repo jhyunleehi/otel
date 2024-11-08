@@ -71,6 +71,13 @@ type BolckDeviceStat struct {
 	SlavesDevName []string
 }
 
+type Interface struct {
+	Index int    // positive integer that starts at one, zero is never used
+	MTU   int    // maximum transmission unit
+	Name  string // e.g., "en0", "lo0", "eth0.100"
+	Addrs []string
+}
+
 var FsTypeMap map[int64]string
 
 func SetCode() {

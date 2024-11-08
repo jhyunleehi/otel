@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"otel/iscsi"
 	"otel/model"
@@ -24,9 +25,10 @@ type Trace struct {
 	Io            map[int]model.ProcessIO            //pid index
 	Fs            map[string]model.FileSystem        //process file system
 	Dev           map[uint64]model.BolckDeviceStat   //process device
-	FileSystemMap map[string]model.FileSystem        //all file system
-	DeviceMap     map[uint64]string                  //all device path
-	DeviceStatMap map[uint64]model.BolckDeviceStat   //all device info
+	Nic           map[string]model.Interface
+	FileSystemMap map[string]model.FileSystem      //all file system
+	DevicePathMap map[uint64]string                //all device path
+	DeviceStatMap map[uint64]model.BolckDeviceStat //all device info
 	ISCSIInfo     iscsi.ISCSIInfo
 }
 
@@ -100,8 +102,8 @@ func (t *Trace) CreatePidFdMap() error {
 					deviceNumber = 0
 				}
 				fd.DeviceNumber = deviceNumber
-				if _, exist := t.DeviceMap[deviceNumber]; !exist {
-					fd.DevicePath = t.DeviceMap[deviceNumber]
+				if _, exist := t.DevicePathMap[deviceNumber]; !exist {
+					fd.DevicePath = t.DevicePathMap[deviceNumber]
 				}
 				fd.MountPoint = target
 
@@ -138,7 +140,7 @@ func (t *Trace) CreateDevMap() error {
 	for _, pid := range t.Pid {
 		for _, fd := range t.Fd[pid] {
 			deviceNumber := fd.DeviceNumber
-			if devicePath, exists := t.DeviceMap[deviceNumber]; exists {
+			if devicePath, exists := t.DevicePathMap[deviceNumber]; exists {
 				if len(devicePath) == 0 {
 					continue
 				}
@@ -161,7 +163,7 @@ func (t *Trace) UpdateDevSlave() error {
 	//5. slave device number를 저장
 	//6. 나중에 edge 그릴때 slave 있는 경우는 추적해서 추적하여 그리도록 DFS 방식으로 구현
 	for deviceNumber := range t.Dev {
-		devicePath := t.DeviceMap[deviceNumber]
+		devicePath := t.DevicePathMap[deviceNumber]
 		log.Debugf("[%d][%s]", deviceNumber, devicePath)
 		if strings.Contains(devicePath, "dm") {
 			fields := strings.Split(devicePath, "/")
@@ -239,6 +241,15 @@ func (t *Trace) UpdatePidIo() error {
 	return nil
 }
 
+func (t *Trace) CreateNetworkMap() (err error) {
+	t.Nic, err = getNetworkInterfaces()
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	return nil
+}
+
 func (t *Trace) findFileSystem(filePath string) (fs model.FileSystem, err error) {
 	longestMatch := ""
 	for _, v := range t.FileSystemMap {
@@ -290,7 +301,7 @@ func (t *Trace) CreateFileSystemMap() error {
 				fs.DeviceNumber = stat.Rdev
 				fs.Major = (stat.Rdev >> 8) & 0xff
 				fs.Minor = stat.Rdev & 0xff
-				fs.DevicePath = t.DeviceMap[fs.DeviceNumber]
+				fs.DevicePath = t.DevicePathMap[fs.DeviceNumber]
 			}
 			t.FileSystemMap[fs.MountPoint] = fs
 		}
@@ -300,7 +311,7 @@ func (t *Trace) CreateFileSystemMap() error {
 }
 
 func (t *Trace) CreateDeviceMap() error {
-	t.DeviceMap = make(map[uint64]string)
+	t.DevicePathMap = make(map[uint64]string)
 	t.DeviceStatMap = make(map[uint64]model.BolckDeviceStat)
 
 	// /dev 디렉토리 읽기
@@ -326,7 +337,7 @@ func (t *Trace) CreateDeviceMap() error {
 		}
 
 		deviceNumber := uint64(stat.Rdev)
-		t.DeviceMap[deviceNumber] = devicePath
+		t.DevicePathMap[deviceNumber] = devicePath
 
 		//device mapper, slaves 처리
 		slaveDevName := []string{}
@@ -393,6 +404,36 @@ func (t *Trace) CreateISCSIInfo() (err error) {
 	}
 	log.Debug(t.ISCSIInfo)
 	return nil
+}
+
+func (t *Trace) findInitiatorByDevice(devicePath string) (initiator string, err error) {
+	fields := strings.Split(devicePath, "/")
+	if len(fields) < 2 {
+		msg := fmt.Sprintf("no device name [%s]", devicePath)
+		log.Error(msg)
+		return initiator, errors.New(msg)
+	}
+	dname := fields[len(fields)-1]
+	for _, device := range t.ISCSIInfo.AttachedSCSIDevices {
+		if device.Device == dname {
+			return t.ISCSIInfo.Interface.Initiator, nil
+		}
+	}
+	return "", nil
+}
+
+func (t *Trace) findNicByAddr(addr string) (nicName string, err error) {
+	nicName = ""
+	for nicName, nic := range t.Nic {
+		for _, v := range nic.Addrs {
+			if strings.HasPrefix(v, addr) {
+				return nicName, nil
+			}
+		}
+	}
+	msg := fmt.Sprintf("not found nic name [%s]", addr)
+	log.Error(msg)
+	return "", errors.New(msg)
 }
 
 func getMachinId() (string, error) {
@@ -597,4 +638,94 @@ func getHostname() (string, error) {
 
 	log.Debugf("Hostname: [%s]", hostname)
 	return hostname, nil
+}
+
+func getNetworkInterfaces() (nic map[string]model.Interface, err error) {
+	nic = map[string]model.Interface{}
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		log.Errorf("Failed to get network interfaces: %v\n", err)
+		return nic, err
+	}
+	for _, iface := range interfaces {
+		if len(iface.Name) == 0 {
+			continue
+		}
+		log.Debugf("Interface: %s", iface.Name)
+		addrs, err := iface.Addrs()
+		if err != nil {
+			log.Errorf("Failed to get addresses for interface %s: %v", iface.Name, err)
+			continue
+		}
+		address := []string{}
+		for _, addr := range addrs {
+			log.Debugf("%s", addr.String())
+			address = append(address, addr.String())
+		}
+		ifs := model.Interface{
+			Name:  iface.Name,
+			Addrs: address,
+		}
+		nic[iface.Name] = ifs
+	}
+	return nic, nil
+}
+
+// resolveHostnameToIP는 hostname을 IP 주소로 변환합니다.
+func resolveHostnameToIP(hostname string) ([]net.IP, error) {
+	ips, err := net.LookupIP(hostname)
+	if err != nil {
+		log.Errorf("failed to lookup IP for hostname %s: %w", hostname, err)
+		return ips, err
+	}
+	return ips, nil
+}
+
+// getHostnameFromMounts는 /proc/mounts 파일에서 hostname을 추출합니다.
+func getIpAddrFromMounts(mountdev string) (addr []string, err error) {
+	hostname := ""
+	if strings.Contains(mountdev, ":") {
+		parts := strings.Split(mountdev, ":")
+		if len(parts) > 0 {
+			hostname = parts[0]
+		}
+	}
+
+	if hostname == "" {
+		msg := fmt.Sprintf("not fount hostname [%s]", mountdev)
+		log.Error(msg)
+		return addr, errors.New(msg)
+	}
+
+	ips, err := resolveHostnameToIP(hostname)
+	if err != nil {
+		log.Error(err)
+		return addr, err
+	}
+
+	for _, v := range ips {
+		ipaddr := v.String()
+		addr = append(addr, ipaddr)
+	}
+	if len(addr) == 0 {
+		msg := fmt.Sprintf("not fount hostname [%s]", mountdev)
+		log.Error(msg)
+		return addr, errors.New(msg)
+	}
+	return addr, nil
+}
+
+// findInterfaceForAddress는 특정 IP 주소와의 연결에서 사용되는 네트워크 인터페이스를 확인합니다.
+func findInterfaceForAddress(target string) (string, error) {
+	conn, err := net.Dial("udp", target)
+	if err != nil {
+		log.Errorf("Failed to dial %s: %v", target, err)
+		return "", err
+	}
+	defer conn.Close()
+
+	// 로컬 주소에서 사용된 IP 및 포트를 가져옴
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+	addr := localAddr.IP.String()
+	return addr, nil
 }

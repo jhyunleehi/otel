@@ -1,6 +1,7 @@
 package trace
 
 import (
+	"errors"
 	"fmt"
 	"path"
 	"runtime"
@@ -111,6 +112,12 @@ func (t *Trace) CreateNodeGraphData() error {
 		return err
 	}
 
+	err = t.CreateNetworkMap()
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
 	err = t.UpdatePidIo()
 	if err != nil {
 		log.Error(err)
@@ -130,11 +137,17 @@ func (t *Trace) CreatePrometheusMetric() (err error) {
 	t.createNodePidFd()
 	t.createNodeFS()
 	t.createNodeDevice()
+	t.createNodeDeviceMapper()
+	t.createNodeIscsi()
+	t.createNodeNic()
 
 	t.createEdgeHostPid()
 	t.createEdgePidFd()
 	t.createEdgFdFs()
-	t.createEdgFsDevice()
+	t.createEdgFsDeviceNic()
+	t.createEdgDeviceMapper()
+	t.createEdgDeviceIscsi()
+	t.createEdgIscsiNic()
 
 	return nil
 }
@@ -220,7 +233,7 @@ func (t *Trace) createNodeFS() (err error) {
 
 func (t *Trace) createNodeDevice() (err error) {
 	for k, ds := range t.Dev {
-		devicePath := t.DeviceMap[k]
+		devicePath := t.DevicePathMap[k]
 		nodeId := fmt.Sprintf("dev:%s:%s", t.Hostname, devicePath)
 		nodeName := devicePath
 		nodeMainStat := "online"
@@ -235,6 +248,71 @@ func (t *Trace) createNodeDevice() (err error) {
 		newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
 		NodeMetric.WithLabelValues(newNode...).Set(1)
 	}
+	return nil
+}
+
+func (t *Trace) createNodeDeviceMapper() (err error) {
+	for _, ds := range t.Dev {
+		for _, v := range ds.SlavesDev {
+			ds := t.DeviceStatMap[v]
+			devicePath := ds.DevicePath
+			nodeId := fmt.Sprintf("dev:%s:%s", t.Hostname, devicePath)
+			nodeName := devicePath
+			nodeMainStat := "online"
+			nodeSubStat := fmt.Sprintf("%d MiB", ds.Size/1024/1024) //size
+			nodeArcFail := fmt.Sprintf("%f", 0.0)
+			nodeArcPass := fmt.Sprintf("%f", 1.0)
+			nodeRole := ""
+			nodeColor := ""
+			nodeIcon := ""
+			nodeRadius := ""
+			nodeHighlighted := ""
+			newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
+			NodeMetric.WithLabelValues(newNode...).Set(1)
+		}
+	}
+	return nil
+}
+
+func (t *Trace) createNodeIscsi() (err error) {
+	initiator := t.ISCSIInfo.Interface.Initiator
+	ipaddr := t.ISCSIInfo.Interface.IPAddress
+	nodeId := fmt.Sprintf("iscsi:%s:%s", t.Hostname, initiator)
+	nodeName := fmt.Sprintf("%s:%s", ipaddr, initiator)
+	nodeMainStat := "online"
+	nodeSubStat := fmt.Sprintf("%d MiB", 0) //size
+	nodeArcFail := fmt.Sprintf("%f", 0.0)
+	nodeArcPass := fmt.Sprintf("%f", 1.0)
+	nodeRole := ""
+	nodeColor := ""
+	nodeIcon := ""
+	nodeRadius := ""
+	nodeHighlighted := ""
+	newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
+	NodeMetric.WithLabelValues(newNode...).Set(1)
+	return nil
+}
+
+func (t *Trace) createNodeNic() (err error) {
+	ipaddr := t.ISCSIInfo.Interface.IPAddress
+	nicName, err := t.findNicByAddr(ipaddr)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	nodeId := fmt.Sprintf("nic:%s:%s", t.Hostname, nicName)
+	nodeName := fmt.Sprintf("%s:%s", nicName, ipaddr)
+	nodeMainStat := "online"
+	nodeSubStat := fmt.Sprintf("%d MiB", 0) //size
+	nodeArcFail := fmt.Sprintf("%f", 0.0)
+	nodeArcPass := fmt.Sprintf("%f", 1.0)
+	nodeRole := ""
+	nodeColor := ""
+	nodeIcon := ""
+	nodeRadius := ""
+	nodeHighlighted := ""
+	newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
+	NodeMetric.WithLabelValues(newNode...).Set(1)
 	return nil
 }
 
@@ -293,17 +371,52 @@ func (t *Trace) createEdgFdFs() (err error) {
 	return nil
 }
 
-func (t *Trace) createEdgFsDevice() (err error) {
+func (t *Trace) createEdgFsDeviceNic() (err error) {
 	for _, fs := range t.Fs {
 		switch fs.Type {
 		case "nfs4", "nfs3":
 			log.Debug("NFS Connection")
-		default:
-			edgeId := fmt.Sprintf("%s:%s", t.Hostname, fs.MountPoint)
+			log.Debugf("Mount device[%s] point[%s] type[%s]", fs.MountDevice, fs.MountPoint, fs.Type)
+			nicName := ""
+			nfsSvrAddrs, err := getIpAddrFromMounts(fs.MountDevice)
+			if err != nil {
+				log.Error(err)
+				return err
+			}
+			for _, nfsAddr := range nfsSvrAddrs {
+				localaddr, err := findInterfaceForAddress(nfsAddr+":22")
+				if err != nil {
+					log.Error(err)
+					return err
+				}				
+				nicName, err = t.findNicByAddr(localaddr)
+				if err != nil {
+					log.Debug(err)
+				}
+			}
+			if nicName == "" {
+				msg := fmt.Sprintf("no nic [%v]", fs.MountDevice)
+				log.Error(msg)
+				return errors.New(msg)
+			}
+			edgeId := fmt.Sprintf("%s:%s:%s", t.Hostname, fs.MountPoint, nicName)
 			edgeSource := fmt.Sprintf("fs:%s:%s", t.Hostname, fs.MountPoint)
+			edgeTarget := fmt.Sprintf("nic:%s:%s", t.Hostname, nicName)
+			edgeMainStat := "fsE1"
+			edgeSecondarystat := "fsE2"
+			edgeDetail__info := ""
+			edgeThickness := ""
+			edgeHighlighted := ""
+			edgeColor := ""
+			newNode := []string{edgeId, edgeSource, edgeTarget, edgeMainStat, edgeSecondarystat, edgeDetail__info, edgeThickness, edgeHighlighted, edgeColor}
+			EdgeMetric.WithLabelValues(newNode...).Set(1)
+
+		default:
 			deviceNumber := fs.DeviceNumber
-			dv := t.DeviceMap[deviceNumber]
-			edgeTarget := fmt.Sprintf("dev:%s:%s", t.Hostname, dv)
+			devicePath := t.DevicePathMap[deviceNumber]
+			edgeId := fmt.Sprintf("%s:%s:%s", t.Hostname, fs.MountPoint, devicePath)
+			edgeSource := fmt.Sprintf("fs:%s:%s", t.Hostname, fs.MountPoint)
+			edgeTarget := fmt.Sprintf("dev:%s:%s", t.Hostname, devicePath)
 			edgeMainStat := "fsE1"
 			edgeSecondarystat := "fsE2"
 			edgeDetail__info := ""
@@ -313,7 +426,78 @@ func (t *Trace) createEdgFsDevice() (err error) {
 			newNode := []string{edgeId, edgeSource, edgeTarget, edgeMainStat, edgeSecondarystat, edgeDetail__info, edgeThickness, edgeHighlighted, edgeColor}
 			EdgeMetric.WithLabelValues(newNode...).Set(1)
 		}
-
 	}
+	return nil
+}
+
+func (t *Trace) createEdgDeviceMapper() (err error) {
+	for key, dv := range t.Dev {
+		for _, sv := range dv.SlavesDev {
+			sdevicePath := t.DevicePathMap[key]
+			tdevicePath := t.DevicePathMap[sv]
+			edgeId := fmt.Sprintf("%s:%s:%s", t.Hostname, sdevicePath, tdevicePath)
+			edgeSource := fmt.Sprintf("dev:%s:%s", t.Hostname, sdevicePath)
+			edgeTarget := fmt.Sprintf("dev:%s:%s", t.Hostname, tdevicePath)
+			edgeMainStat := "devE1"
+			edgeSecondarystat := "devE2"
+			edgeDetail__info := ""
+			edgeThickness := ""
+			edgeHighlighted := ""
+			edgeColor := ""
+			newNode := []string{edgeId, edgeSource, edgeTarget, edgeMainStat, edgeSecondarystat, edgeDetail__info, edgeThickness, edgeHighlighted, edgeColor}
+			EdgeMetric.WithLabelValues(newNode...).Set(1)
+		}
+	}
+	return nil
+}
+
+func (t *Trace) createEdgDeviceIscsi() (err error) {
+	for _, dv := range t.Dev {
+		for _, slave := range dv.SlavesDev {
+			sdevicePath := t.DevicePathMap[slave]
+			initiator, err := t.findInitiatorByDevice(sdevicePath)
+			if err != nil {
+				log.Error(err)
+				continue
+			}
+			if len(initiator) == 0 {
+				continue
+			}
+			edgeId := fmt.Sprintf("%s:%s:%s", t.Hostname, sdevicePath, initiator)
+			edgeSource := fmt.Sprintf("dev:%s:%s", t.Hostname, sdevicePath)
+			edgeTarget := fmt.Sprintf("iscsi:%s:%s", t.Hostname, initiator)
+			edgeMainStat := "iscsiE1"
+			edgeSecondarystat := "iscsiE2"
+			edgeDetail__info := ""
+			edgeThickness := ""
+			edgeHighlighted := ""
+			edgeColor := ""
+			newNode := []string{edgeId, edgeSource, edgeTarget, edgeMainStat, edgeSecondarystat, edgeDetail__info, edgeThickness, edgeHighlighted, edgeColor}
+			EdgeMetric.WithLabelValues(newNode...).Set(1)
+		}
+	}
+	return nil
+}
+
+func (t *Trace) createEdgIscsiNic() (err error) {
+	initiator := t.ISCSIInfo.Interface.Initiator
+	ipaddr := t.ISCSIInfo.Interface.IPAddress
+	nicName, err := t.findNicByAddr(ipaddr)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	edgeId := fmt.Sprintf("%s:%s:%s", t.Hostname, initiator, ipaddr)
+	edgeSource := fmt.Sprintf("iscsi:%s:%s", t.Hostname, initiator)
+	edgeTarget := fmt.Sprintf("nic:%s:%s", t.Hostname, nicName)
+
+	edgeMainStat := "iscsiE1"
+	edgeSecondarystat := "iscsiE2"
+	edgeDetail__info := ""
+	edgeThickness := ""
+	edgeHighlighted := ""
+	edgeColor := ""
+	newNode := []string{edgeId, edgeSource, edgeTarget, edgeMainStat, edgeSecondarystat, edgeDetail__info, edgeThickness, edgeHighlighted, edgeColor}
+	EdgeMetric.WithLabelValues(newNode...).Set(1)
 	return nil
 }
