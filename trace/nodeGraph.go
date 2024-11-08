@@ -153,6 +153,9 @@ func (t *Trace) CreatePrometheusMetric() (err error) {
 }
 
 func (t *Trace) createNodeHost() (err error) {
+	if len(t.Pid) == 0 {
+		return
+	}
 	nodeId := fmt.Sprintf("host:%s", t.Hostname)
 	nodeName := fmt.Sprintf("host:%s", t.Hostname)
 	nodeMainStat := t.targetCommnd
@@ -211,7 +214,6 @@ func (t *Trace) createNodePidFd() (err error) {
 }
 
 func (t *Trace) createNodeFS() (err error) {
-
 	for mountPoint := range t.Fs {
 		fs := t.FileSystemMap[mountPoint]
 		nodeId := fmt.Sprintf("fs:%s:%s", t.Hostname, fs.MountPoint)
@@ -298,25 +300,53 @@ func (t *Trace) createNodeIscsi() (err error) {
 }
 
 func (t *Trace) createNodeNic() (err error) {
-	ipaddr := t.ISCSIInfo.Interface.IPAddress
-	nicName, err := t.findNicByAddr(ipaddr)
+	initiator := t.ISCSIInfo.Interface.Initiator
+	if len(initiator) != 0 {
+		ipaddr := t.ISCSIInfo.Interface.IPAddress
+		nicName, err := t.findNicByAddr(ipaddr)
+		if err != nil {
+			log.Error(err)
+			return err
+		}
+		nodeId := fmt.Sprintf("nic:%s:%s", t.Hostname, nicName)
+		nodeName := fmt.Sprintf("%s:%s", nicName, ipaddr)
+		nodeMainStat := "online"
+		nodeSubStat := fmt.Sprintf("%d MiB", 0) //size
+		nodeArcFail := fmt.Sprintf("%f", 0.0)
+		nodeArcPass := fmt.Sprintf("%f", 1.0)
+		nodeRole := ""
+		nodeColor := ""
+		nodeIcon := ""
+		nodeRadius := ""
+		nodeHighlighted := ""
+		newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
+		NodeMetric.WithLabelValues(newNode...).Set(1)
+	}
+	addrs, err := t.getNfsClientAddr()
 	if err != nil {
 		log.Error(err)
 		return err
 	}
-	nodeId := fmt.Sprintf("nic:%s:%s", t.Hostname, nicName)
-	nodeName := fmt.Sprintf("%s:%s", nicName, ipaddr)
-	nodeMainStat := "online"
-	nodeSubStat := fmt.Sprintf("%d MiB", 0) //size
-	nodeArcFail := fmt.Sprintf("%f", 0.0)
-	nodeArcPass := fmt.Sprintf("%f", 1.0)
-	nodeRole := ""
-	nodeColor := ""
-	nodeIcon := ""
-	nodeRadius := ""
-	nodeHighlighted := ""
-	newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
-	NodeMetric.WithLabelValues(newNode...).Set(1)
+	for _, ipaddr := range addrs {
+		nicName, err := t.findNicByAddr(ipaddr)
+		if err != nil {
+			log.Error(err)
+			return err
+		}
+		nodeId := fmt.Sprintf("nic:%s:%s", t.Hostname, nicName)
+		nodeName := fmt.Sprintf("%s:%s", nicName, ipaddr)
+		nodeMainStat := "online"
+		nodeSubStat := fmt.Sprintf("%d MiB", 0) //size
+		nodeArcFail := fmt.Sprintf("%f", 0.0)
+		nodeArcPass := fmt.Sprintf("%f", 1.0)
+		nodeRole := ""
+		nodeColor := ""
+		nodeIcon := ""
+		nodeRadius := ""
+		nodeHighlighted := ""
+		newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
+		NodeMetric.WithLabelValues(newNode...).Set(1)
+	}
 	return nil
 }
 
@@ -488,7 +518,7 @@ func (t *Trace) createEdgIscsiNic() (err error) {
 	if len(initiator) == 0 {
 		return nil
 	}
-	
+
 	ipaddr := t.ISCSIInfo.Interface.IPAddress
 	nicName, err := t.findNicByAddr(ipaddr)
 	if err != nil {
@@ -508,4 +538,31 @@ func (t *Trace) createEdgIscsiNic() (err error) {
 	newNode := []string{edgeId, edgeSource, edgeTarget, edgeMainStat, edgeSecondarystat, edgeDetail__info, edgeThickness, edgeHighlighted, edgeColor}
 	EdgeMetric.WithLabelValues(newNode...).Set(1)
 	return nil
+}
+
+func (t *Trace) getNfsClientAddr() (addr []string, err error) {
+	addrMap := map[string]string{}
+	for _, fs := range t.Fs {
+		if strings.HasPrefix(fs.Type, "nfs") {
+			log.Debugf("Mount device[%s] point[%s] type[%s]", fs.MountDevice, fs.MountPoint, fs.Type)
+			localaddr := ""
+			nfsSvrAddrs, err := getIpAddrFromMounts(fs.MountDevice)
+			if err != nil {
+				log.Error(err)
+				return addr, err
+			}
+			for _, nfsAddr := range nfsSvrAddrs {
+				localaddr, err = findInterfaceForAddress(nfsAddr + ":22")
+				if err != nil {
+					log.Error(err)
+					return addr, err
+				}
+				addrMap[localaddr] = localaddr
+			}
+		}
+	}
+	for ip := range addrMap {
+		addr = append(addr, ip)
+	}
+	return addr, nil
 }
