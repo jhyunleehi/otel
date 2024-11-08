@@ -6,12 +6,14 @@ import (
 	"runtime"
 	"strings"
 	"time"
-
+	"github.com/prometheus/client_golang/prometheus"
 	nested "github.com/antonfisher/nested-logrus-formatter"	
 	log "github.com/sirupsen/logrus"
 )
 
 var (
+	NodeMetric *prometheus.GaugeVec
+	EdgeMetric *prometheus.GaugeVec
 )
 
 func init() {
@@ -30,6 +32,47 @@ func init() {
 		},
 	})
 
+
+	NodeMetric = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "graph_node",
+			Help: "Node data for Grafana's Node Graph",
+		},
+		[]string{
+			"id",            //Unique identifier of the node. This ID is referenced by edge in its source and target field.
+			"title",         //Name of the node visible in just under the node.
+			"mainStat",      //First stat shown inside the node itself
+			"secondaryStat", //Same as mainStat, but shown under it inside the node
+			"arc__failed",   //to create the color circle around the node. All values in these fields should add up to 1.
+			"arc__passed",
+			"detail__role", //shown in the header of context menu when clicked on the node
+			"color",        //Can be used to specify a single color instead of using the arc__ fields to specify color sections
+			"icon",
+			"nodeRadius",  //Radius value in pixels. Used to manage node size.
+			"highlighted", //Sets whether the node should be highlighted.
+		},
+	)
+
+	EdgeMetric = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "graph_edge",
+			Help: "Edge relationship data for Grafana's Node Graph",
+		},
+		[]string{
+			"id",            //Unique identifier of the edge.
+			"source",        //Id of the source node.
+			"target",        //Id of the target.
+			"mainStat",      //First stat shown in the overlay when hovering over the edge.
+			"secondarystat", //Same as mainStat, but shown right under it.
+			"detail__info",  //will be shown in the header of context menu when clicked on the edge
+			"thickness",     //The thickness of the edge. Default: 1
+			"highlighted",   //boolean	Sets whether the edge should be highlighted.
+			"color",         //string	Sets the default color of the edge. It can be an acceptable HTML color string. Default: #999
+		},
+	)
+	// Prometheus에 메트릭 등록
+	prometheus.MustRegister(NodeMetric)
+	prometheus.MustRegister(EdgeMetric)
 
 }
 
@@ -85,9 +128,9 @@ func (t *Trace) CreateNodeGraph() error {
 }
 
 func (t *Trace) CreatePrometheusMetric() (err error) {
-	
-	t.NodeMetric.Reset()
-	t.EdgeMetric.Reset()
+
+	NodeMetric.Reset()
+	EdgeMetric.Reset()
 
 	t.createNodeHost()
 	t.createNodePid()
@@ -116,7 +159,7 @@ func (t *Trace) createNodeHost() (err error) {
 	nodeRadius := ""
 	nodeHighlighted := "true"
 	newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
-	t.NodeMetric.WithLabelValues(newNode...).Set(1)
+	NodeMetric.WithLabelValues(newNode...).Set(1)
 	return nil
 }
 
@@ -135,7 +178,7 @@ func (t *Trace) createNodePid() (err error) {
 		nodeRadius := ""
 		nodeHighlighted := ""
 		newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
-		t.NodeMetric.WithLabelValues(newNode...).Set(1)
+		NodeMetric.WithLabelValues(newNode...).Set(1)
 	}
 	return nil
 }
@@ -155,7 +198,7 @@ func (t *Trace) createNodePidFd() (err error) {
 			nodeRadius := ""
 			nodeHighlighted := ""
 			newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
-			t.NodeMetric.WithLabelValues(newNode...).Set(1)
+			NodeMetric.WithLabelValues(newNode...).Set(1)
 		}
 	}
 	return nil
@@ -177,7 +220,7 @@ func (t *Trace) createNodeFS() (err error) {
 		nodeRadius := ""
 		nodeHighlighted := "true"
 		newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
-		t.NodeMetric.WithLabelValues(newNode...).Set(1)
+		NodeMetric.WithLabelValues(newNode...).Set(1)
 	}
 	return nil
 }
@@ -197,7 +240,7 @@ func (t *Trace) createNodeDevice() (err error) {
 		nodeRadius := ""
 		nodeHighlighted := ""
 		newNode := []string{nodeId, nodeName, nodeMainStat, nodeSubStat, nodeArcFail, nodeArcPass, nodeRole, nodeColor, nodeIcon, nodeRadius, nodeHighlighted}
-		t.NodeMetric.WithLabelValues(newNode...).Set(1)
+		NodeMetric.WithLabelValues(newNode...).Set(1)
 	}
 	return nil
 }
@@ -214,7 +257,7 @@ func (t *Trace) createEdgeHostPid() (err error) {
 		edgeHighlighted := ""
 		edgeColor := ""
 		newNode := []string{edgeId, edgeSource, edgeTarget, edgeMainStat, edgeSecondarystat, edgeDetail__info, edgeThickness, edgeHighlighted, edgeColor}
-		t.EdgeMetric.WithLabelValues(newNode...).Set(1)
+		EdgeMetric.WithLabelValues(newNode...).Set(1)
 	}
 	return nil
 }
@@ -232,7 +275,7 @@ func (t *Trace) createEdgePidFd() (err error) {
 			edgeHighlighted := ""
 			edgeColor := ""
 			newNode := []string{edgeId, edgeSource, edgeTarget, edgeMainStat, edgeSecondarystat, edgeDetail__info, edgeThickness, edgeHighlighted, edgeColor}
-			t.EdgeMetric.WithLabelValues(newNode...).Set(1)
+			EdgeMetric.WithLabelValues(newNode...).Set(1)
 		}
 	}
 	return nil
@@ -251,7 +294,7 @@ func (t *Trace) createEdgFdFs() (err error) {
 			edgeHighlighted := ""
 			edgeColor := ""
 			newNode := []string{edgeId, edgeSource, edgeTarget, edgeMainStat, edgeSecondarystat, edgeDetail__info, edgeThickness, edgeHighlighted, edgeColor}
-			t.EdgeMetric.WithLabelValues(newNode...).Set(1)
+			EdgeMetric.WithLabelValues(newNode...).Set(1)
 		}
 	}
 	return nil
@@ -271,7 +314,7 @@ func (t *Trace) createEdgFsDevice() (err error) {
 		edgeHighlighted := ""
 		edgeColor := ""
 		newNode := []string{edgeId, edgeSource, edgeTarget, edgeMainStat, edgeSecondarystat, edgeDetail__info, edgeThickness, edgeHighlighted, edgeColor}
-		t.EdgeMetric.WithLabelValues(newNode...).Set(1)
+		EdgeMetric.WithLabelValues(newNode...).Set(1)
 	}
 	return nil
 }
