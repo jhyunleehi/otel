@@ -75,12 +75,12 @@ func (t *Trace) CreatePidFdMap() error {
 			target, err := os.Readlink(fdPath)
 			if err != nil {
 				msg := fmt.Sprintf("Error reading symlink for fd %s: %v", file.Name(), err)
-				log.Error(msg)
+				log.Debug(msg)
 				continue
 			}
 			regularFile, err := IsRegularFile(target)
 			if err != nil {
-				log.Error(err)
+				log.Debug(err)
 				continue
 			}
 			if regularFile {
@@ -474,9 +474,9 @@ func IsRegularFile(filePath string) (bool, error) {
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Errorf("File does not exist: %v", err)
+			log.Debugf("File does not exist: %v", err)
 		} else {
-			log.Errorf("Error checking file: %v", err)
+			log.Debugf("Error checking file: %v", err)
 		}
 		return false, err
 	}

@@ -384,11 +384,11 @@ func (t *Trace) createEdgFsDeviceNic() (err error) {
 				return err
 			}
 			for _, nfsAddr := range nfsSvrAddrs {
-				localaddr, err := findInterfaceForAddress(nfsAddr+":22")
+				localaddr, err := findInterfaceForAddress(nfsAddr + ":22")
 				if err != nil {
 					log.Error(err)
 					return err
-				}				
+				}
 				nicName, err = t.findNicByAddr(localaddr)
 				if err != nil {
 					log.Debug(err)
@@ -482,6 +482,9 @@ func (t *Trace) createEdgDeviceIscsi() (err error) {
 func (t *Trace) createEdgIscsiNic() (err error) {
 	initiator := t.ISCSIInfo.Interface.Initiator
 	ipaddr := t.ISCSIInfo.Interface.IPAddress
+	if len(initiator) == 0 {
+		return nil
+	}
 	nicName, err := t.findNicByAddr(ipaddr)
 	if err != nil {
 		log.Error(err)
